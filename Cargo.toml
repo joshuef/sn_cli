@@ -43,6 +43,8 @@ serde_yaml = "~0.8"
 shrust = "~0.0.7"
 structopt = "~0.3"
 xor_name = "1"
+futures = "~0.3"
+
 
   [dependencies.ed25519-dalek]
   version = "1.0.1"
@@ -60,6 +62,7 @@ xor_name = "1"
 
   [dependencies.sn_api]
   version = "~0.27"
+  path="../sn_api"
   default-features = false
   features = [ "app", "authd_client", "simulated-payouts" ]
 

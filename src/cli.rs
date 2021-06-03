@@ -22,6 +22,7 @@ use anyhow::{anyhow, Result};
 use log::debug;
 use sn_api::{Safe, XorUrlBase};
 use structopt::{clap::AppSettings::ColoredHelp, StructOpt};
+use futures::{stream::FuturesUnordered, StreamExt, select};
 
 #[derive(StructOpt, Debug)]
 /// Interact with the Safe Network
@@ -76,9 +77,35 @@ pub async fn run_with(cmd_args: Option<&[&str]>, safe: &mut Safe) -> Result<()> 
         }
     };
 
-    debug!("Processing command: {:?}", args);
+    let mut tasks = FuturesUnordered::new();
 
-    let result = match args.cmd {
+    let cmd_result_handle : tokio::task::JoinHandle<Result<()>> = tokio::spawn(async {
+        act_on_args( safe, output_fmt, args ).await
+    });
+
+
+    let cmd_error_handle : tokio::task::JoinHandle<Result<()>> = tokio::spawn(async {
+
+        safe.clone().return_cmd_error().await.map_err(|error| anyhow!("Command error occured:{:?}", error) )
+
+    });
+
+
+    tasks.push( cmd_error_handle);
+    tasks.push(cmd_result_handle);
+
+    debug!("Processing command: {:?}", args);
+    let Some(result) = tasks.next().await;
+
+    safe.xorurl_base = prev_base;
+
+    return result?
+
+
+}
+
+async fn act_on_args(safe: &mut Safe, output_fmt: OutputFmt,  args: CmdArgs) -> Result<()> {
+    match args.cmd {
         Some(SubCommands::Config { cmd }) => config_commander(cmd).await,
         Some(SubCommands::Networks { cmd }) => networks_commander(cmd).await,
         Some(SubCommands::Update {}) => {
@@ -121,8 +148,5 @@ pub async fn run_with(cmd_args: Option<&[&str]>, safe: &mut Safe) -> Result<()> 
             }
         }
         None => shell::shell_run(), // then enter in interactive shell
-    };
-
-    safe.xorurl_base = prev_base;
-    result
+    }
 }
